@@ -16,6 +16,17 @@ class CpInterface:
     PtP = ''
     Mask = ''
     
+class CpIfCfgDefs:
+    COMMAND = 'ifconfig'
+    PROCNETDEV = '/proc/net/dev'
+    INTERFACE = 'ppp0'
+    INETADDR = 'inet addr:'
+    PTP = 'P-t-P:'
+    MASK = 'Mask:'
+    RXBYTES = 'RX bytes:'
+    TXBYTES = 'Tx bytes:'
+    
+    
 
 class NetMon(threading.Thread):
 
@@ -26,8 +37,7 @@ class NetMon(threading.Thread):
         self.closing = False # A flag to indicate thread shutdown
         threading.Thread.__init__(self)
    
-        
-        
+   
     def run(self):
         self._target(*self._args)
         
@@ -41,9 +51,9 @@ class NetMon(threading.Thread):
     
     def net_mon(self): 
         # Check to see that interface exists
-        if (self.query_interface('ppp0')):
+        if (self.query_interface(CpIfCfgDefs.INTERFACE)):
             # Exctract interface metrics via ifconfig
-            result = self.query_interface_ifconfig('ppp0')
+            result = self.query_interface_ifconfig(CpIfCfgDefs.INTERFACE)
         
             print 'Interface Results'
             print 'Result: %d' % result.ResultCode
@@ -60,23 +70,32 @@ class NetMon(threading.Thread):
             # Initialize new varialbe to hold results
         handle = CpInterface()
         
-        output = subprocess.Popen(['ifconfig', interface], stdout=subprocess.PIPE).communicate()[0]
+        output = subprocess.Popen([CpIfCfgDefs.COMMAND, interface], stdout=subprocess.PIPE).communicate()[0]
         
         handle.ResultCode = CpInterfaceResultCode.FOUND
-        handle.RxBytes = re.findall('RX bytes:([0-9]*) ', output)[0]
-        handle.TxBytes = re.findall('TX bytes:([0-9]*) ', output)[0]
         
-        # Extract networking tuples
-        tuple = re.findall( r'[0-9]+(?:\.[0-9]+){3}', output)
-        handle.InetAddress = tuple[0]
-        handle.PtP = tuple[1]
-        handle.Mask = tuple[2]
+        # Read the parameters that are available...
+        
+        if CpIfCfgDefs.RXBYTES in output:
+            handle.RxBytes = re.findall('RX bytes:([0-9]*) ', output)[0]
+            
+        if CpIfCfgDefs.TXBYTES in output:
+            handle.TxBytes = re.findall('TX bytes:([0-9]*) ', output)[0]
+        
+        if CpIfCfgDefs.INETADDR in output:
+            if CpIfCfgDefs.PTP in output:
+                if CpIfCfgDefs.MASK in output:
+                    # Extract networking tuples
+                    parts = re.findall( r'[0-9]+(?:\.[0-9]+){3}', output)
+                    handle.InetAddress = parts[0]
+                    handle.PtP = parts[1]
+                    handle.Mask = parts[2]
     
         return handle
     
     def query_interface(self, interface):
         
-        for line in open('/proc/net/dev', 'r'):
+        for line in open(CpIfCfgDefs.PROCNETDEV, 'r'):
             if interface in line:
                 return True
             
@@ -88,7 +107,7 @@ class NetMon(threading.Thread):
         # Initialize new varialbe to hold results
         handle = CpInterface()
         
-        for line in open('/proc/net/dev', 'r'):
+        for line in open(CpIfCfgDefs.PROCNETDEV, 'r'):
             if interface in line:
                 data = line.split('%s:' % interface)[1].split()
                 #rx_bytes, tx_bytes = (data[0], data[8])
